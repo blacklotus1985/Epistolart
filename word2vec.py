@@ -16,7 +16,11 @@ from src import cleaner
 from stop_words import get_stop_words
 import converter
 from sklearn.decomposition import PCA
-
+import gensim.downloader as api
+from gensim.models import TfidfModel
+from gensim.corpora import Dictionary
+from py2neo.matching import RelationshipMatcher
+from py2neo import NodeMatcher
 
 
 
@@ -51,6 +55,7 @@ def avg_w2vec(tf_idf_matrix,model):
 
 
 
+
 def save_lemmatized_text(df,cleaned_coprus,column_name='testo',save=True):
     """
     save lemmatized text in dataframe
@@ -66,6 +71,13 @@ def save_lemmatized_text(df,cleaned_coprus,column_name='testo',save=True):
         df.to_excel(os.getcwd()+'/data/df_lemmatized.xlsx',index=False)
     return df
 
+def gens_tf(corpus):
+    dct = Dictionary([corpus])  # fit dictionary
+    docs = [dct.doc2bow(line) for line in [corpus]]  # convert corpus to BoW format
+    model = TfidfModel(docs)  # fit model
+    vector = model[docs[0]]  # apply model to the first corpus document
+    return model
+
 def calculate_tf_idf(corpus,rownames, max_df=0.4,min_df = 1,max_features = 1000): # removed rownames as index of matrix cause no id for now
     cv = TfidfVectorizer(ngram_range=(1, 1), max_features=max_features,max_df=max_df,min_df=min_df)
     X = cv.fit_transform(corpus)
@@ -74,9 +86,18 @@ def calculate_tf_idf(corpus,rownames, max_df=0.4,min_df = 1,max_features = 1000)
     return count_vect_df,X
 
 
-def graph_to_pandas(graph):
-    list = graph.nodes.match("Letter").all()
+def graph_to_pandas(graph,query):
+    list = graph.nodes.match(query).all()
     return pd.DataFrame(list)
+
+def get_letter_from_paragraph(id_paragraph, graph):
+    relationship_matcher = RelationshipMatcher(graph=graph)
+    letter_node = relationship_matcher.get(id_paragraph)
+    letter_key = letter_node.start_node.get("letter_id")
+    return letter_key
+
+
+
 
 
 if __name__ == '__main__':
@@ -88,7 +109,8 @@ if __name__ == '__main__':
     ft = fasttext.load_model(main_path + '/data/cc.it.300.bin')
     tagger = treetaggerwrapper.TreeTagger(TAGLANG="it")
     graph = connection.connect(conf)
-    df_read = graph_to_pandas(graph)
+    letter_name = get_letter_from_paragraph(id_paragraph=53,graph=graph)
+    df_read = graph_to_pandas(graph,query="Letter")
     df_read = df_read.drop_duplicates(subset='letter_id')
     testo = conf.get("ITEMS","testo")
     df_read = df_read[df_read['transcription'].notna()]
@@ -104,7 +126,14 @@ if __name__ == '__main__':
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-varie.txt', stopwords=stopwords)
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-verbi.txt', stopwords=stopwords)
     cleaned_corpus = cleaner.clean_text(df_read, stopwords=stopwords, tagger=tagger, column='transcription')
-    cleaned_corpus = df_read.transcription.values.astype('U')
+    #cleaned_corpus = df_read.transcription.values.astype('U')
+    gens = True
+    if gens:
+        start = datetime.now()
+        print("start gensim at {}".format(start))
+        model = gens_tf(corpus=cleaned_corpus)
+        end = datetime.now()
+        print("end gensim at {}".format(end))
     start = datetime.now()
     print("start tf idf at {}".format(start))
     df_tf_idf, raw_matrix = calculate_tf_idf(corpus=cleaned_corpus, rownames=row_id, max_df=0.4, max_features=500)
