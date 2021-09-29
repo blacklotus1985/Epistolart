@@ -46,8 +46,6 @@ def total_w2vec(converted_df,ft,tf_idf_matrix):
             del total_name_list
             dict,total_name_list = calculate_vec(converted_df, ft, tf_idf_matrix, column_df=letter_title)
             dict_list.append(dict["value"])
-            print(counter+1)
-            counter = counter + 1
     total_df = pd.DataFrame(dict_list,index = t,columns=total_name_list)
     print (total_df.shape)
     return total_df

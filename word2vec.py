@@ -78,17 +78,22 @@ def gens_tf(corpus):
     vector = model[docs[0]]  # apply model to the first corpus document
     return model
 
-def calculate_tf_idf(corpus,rownames, max_df=0.4,min_df = 1,max_features = 1000): # removed rownames as index of matrix cause no id for now
+def calculate_tf_idf(corpus, max_df=0.4,min_df = 1,max_features = 1000): # removed rownames as index of matrix cause no id for now
     cv = TfidfVectorizer(ngram_range=(1, 1), max_features=max_features,max_df=max_df,min_df=min_df)
     X = cv.fit_transform(corpus)
     Y = X.toarray()
-    count_vect_df = pd.DataFrame(Y, columns=cv.get_feature_names(),index=rownames)# removed index = rownames
+    count_vect_df = pd.DataFrame(Y, columns=cv.get_feature_names())# removed index = rownames
     return count_vect_df,X
 
 
 def graph_to_pandas(graph,query):
     list = graph.nodes.match(query).all()
-    return pd.DataFrame(list)
+    id_list = []
+    for node in list:
+        id_list.append(node.identity)
+    df =  pd.DataFrame(list)
+    df['id'] = id_list
+    return df
 
 def get_letter_from_paragraph(id_paragraph, graph):
     relationship_matcher = RelationshipMatcher(graph=graph)
@@ -110,24 +115,24 @@ if __name__ == '__main__':
     tagger = treetaggerwrapper.TreeTagger(TAGLANG="it")
     graph = connection.connect(conf)
     letter_name = get_letter_from_paragraph(id_paragraph=53,graph=graph)
-    df_read = graph_to_pandas(graph,query="Letter")
-    df_read = df_read.drop_duplicates(subset='letter_id')
+    df_read = graph_to_pandas(graph,query="Paragraph")
+    #df_read = df_read.drop_duplicates(subset='letter_id')
     testo = conf.get("ITEMS","testo")
-    df_read = df_read[df_read['transcription'].notna()]
+    df_read = df_read[df_read['text'].notna()]
     '''
     if paragaph:
         df_read['transcription'] = df_read['transcription'].str.replace('\r', ' ').str.split('\n')
         df_read = df_read.explode('transcription', ignore_index=True)
     '''
-    row_id = df_read['letter_id'].values
+    #row_id = df_read['letter_id'].values
     print("started stopwords")
     stopwords = get_stop_words('it')
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-aggettivi.txt', stopwords=stopwords)
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-varie.txt', stopwords=stopwords)
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-verbi.txt', stopwords=stopwords)
-    cleaned_corpus = cleaner.clean_text(df_read, stopwords=stopwords, tagger=tagger, column='transcription')
+    cleaned_corpus = cleaner.clean_text(df_read, stopwords=stopwords, tagger=tagger, column='text')
     #cleaned_corpus = df_read.transcription.values.astype('U')
-    gens = True
+    gens = False
     if gens:
         start = datetime.now()
         print("start gensim at {}".format(start))
@@ -136,7 +141,7 @@ if __name__ == '__main__':
         print("end gensim at {}".format(end))
     start = datetime.now()
     print("start tf idf at {}".format(start))
-    df_tf_idf, raw_matrix = calculate_tf_idf(corpus=cleaned_corpus, rownames=row_id, max_df=0.4, max_features=500)
+    df_tf_idf, raw_matrix = calculate_tf_idf(corpus=cleaned_corpus, max_df=0.4, max_features=1500) # remember to fix rownames=row_id when you find id letter in paragraphs
     end = datetime.now()
     print("end tf idf at {}".format(end))
     #df_tf_idf = converter.change_same_column(df_tf_idf)
@@ -163,7 +168,7 @@ if __name__ == '__main__':
     cosine_sim = np.round(cosine_similarity(total_big_df, total_big_df),8)
     start = datetime.now()
     print("after cosine sim {}".format(start))
-    df_cosine = pd.DataFrame(cosine_sim, index=row_id,columns=[row_id])
+    df_cosine = pd.DataFrame(cosine_sim) # add index=row_id,columns=[row_id] when fixed id letter problem
     '''
     start = datetime.now()
     print("start saving bigw2vec at {}".format(start))
