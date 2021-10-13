@@ -125,3 +125,5 @@ dmypy.json
 
 # my addings
 data/cc.it.300.bin
+*.xlsx
+*.csv

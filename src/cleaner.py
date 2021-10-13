@@ -1,7 +1,8 @@
 import re
 import treetaggerwrapper
 import corrector
-
+from src import connection
+conf = connection.get_conf()
 
 
 def add_stopwords(file,stopwords):
@@ -30,7 +31,7 @@ def removeNonAlpha(text):
     return text
 
 
-def removeStopWords(text,stopwords,remove_short_words=True):
+def removeStopWords(text,conf,stopwords,remove_short_words=True):
     """
     removes stop words in stopwords
     :param text: text to analyze
@@ -40,7 +41,7 @@ def removeStopWords(text,stopwords,remove_short_words=True):
     """
     words = text.split()
     if remove_short_words:
-        words = [i for i in words if len(i) > 2]
+        words = [i for i in words if len(i) > conf.getint("ITEMS","min_len_words")]
     words = [word for word in words if not word in set(stopwords)]
     text = ' '.join(words)
     return text
@@ -63,7 +64,7 @@ def lemmatize(text,tagger):
     return text
 
 
-def clean_text(df,stopwords,tagger,column='testo'):
+def clean_text(df,conf,stopwords,tagger,column='testo'):
     """
     clean dataframe of letters
     :param df: dataframe with metadata
@@ -81,7 +82,7 @@ def clean_text(df,stopwords,tagger,column='testo'):
             print("couldn't make call")
         '''
         #elem = lemmatize(elem,tagger)
-        elem = removeStopWords(elem,stopwords=stopwords)
+        elem = removeStopWords(elem,conf=conf,stopwords=stopwords)
         cleaned_corpus.append(elem)
     return cleaned_corpus
 
