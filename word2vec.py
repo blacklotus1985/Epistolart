@@ -80,7 +80,7 @@ def gens_tf(corpus):
     vector = model[docs[0]]  # apply model to the first corpus document
     return model
 
-def calculate_tf_idf(corpus, vocabulary, index, max_df=0.4,min_df = 1,max_features = 1000): # removed rownames as index of matrix cause no id for now
+def calculate_tf_idf(corpus, vocabulary, index, max_df=0.4,min_df = 1,max_features = 10000): # removed rownames as index of matrix cause no id for now
     cv = TfidfVectorizer(ngram_range=(1, 1), max_features=max_features,max_df=max_df,min_df=min_df,vocabulary=vocabulary)
     X = cv.fit_transform(corpus)
     Y = X.toarray()
@@ -139,7 +139,8 @@ if __name__ == '__main__':
     df_read = graph_to_pandas(graph,query="Paragraph")
     testo = conf.get("ITEMS","testo")
     df_read = df_read[df_read['translation'].notna()]
-    df_read = df_read.sample(1000)
+    df_read = df_read[df_read['translation'].map(len) > 400]
+    df_read = df_read.sample(1100)
     start = datetime.now()
     print("start get all letters id at {}".format(start))
     df_read = get_all_letters(graph=graph,df=df_read)
@@ -200,7 +201,7 @@ if __name__ == '__main__':
     cosine_sim = np.round(cosine_similarity(total_big_df, total_big_df),15)
     start = datetime.now()
     print("after cosine sim {}".format(start))
-    df_cosine = pd.DataFrame(cosine_sim,index=letter_all,columns=[letter_all])
+    df_cosine = pd.DataFrame(cosine_sim,index=combined_index,columns=[combined_index])
     try:# add index=row_id,columns=[row_id] when fixed id letter problem
         df_cosine = df_cosine.sort_values(letter_name,ascending=False)
     except:
