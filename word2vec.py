@@ -2,28 +2,19 @@
 import pandas as pd
 import numpy as np
 import fasttext.util
-from stop_words import get_stop_words
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import os
 from datetime import datetime
 from src import connection
-from src import cleaner
 import treetaggerwrapper
-from src import cleaner
-import corrector
 from src import cleaner
 from stop_words import get_stop_words
 import converter
 from sklearn.decomposition import PCA
-import gensim.downloader as api
 from gensim.models import TfidfModel
 from gensim.corpora import Dictionary
-from py2neo.matching import RelationshipMatcher
-from py2neo import NodeMatcher
-#from stellargraph import StellarGraph
-from collections import OrderedDict
-
+import pickle
 
 
 def avg_w2vec(tf_idf_matrix,model):
@@ -110,7 +101,7 @@ def get_letter_from_paragraph(df,id_paragraph, graph):
 
 
 def get_all_letters(graph,df):
-    list = [get_letter_from_paragraph(df=df,id_paragraph=id,graph=graph) for id in df['id'] ]
+    list = [get_letter_from_paragraph(df=df,id_paragraph=id,graph=graph) for id in df['id']]
     df['letter_id'] = list
     return df
 
@@ -122,8 +113,17 @@ def create_vocabulary(text):
     swap_dict = {value:key for key, value in dict.items()}
     return swap_dict
 
-
-#result = [f(x) for x in df['col']]
+def get_neighbors(text, ft,k,tuple): # item returned is a string not a list
+    text_words = []
+    for word in text:
+        word_list = ft.get_nearest_neighbors(word,k)
+        text_words.append(word_list)
+    if not tuple:
+        flat_list = [item for sublist in text_words for item in sublist]
+    else:
+        flat_list = [item[1] for sublist in text_words for item in sublist]
+    flat_list = ' '.join(flat_list)
+    return flat_list
 
 
 
@@ -133,19 +133,29 @@ if __name__ == '__main__':
     conf = connection.get_conf()
     main_path = os.getcwd()
     path = os.path.dirname(os.getcwd())
+    start = datetime.now()
+    print("start load ft at {}".format(start))
     ft = fasttext.load_model(main_path + '/data/cc.it.300.bin')
+    start = datetime.now()
+    print("end load ft at {}".format(start))
+    #pickle.dump(ft, open(os.getcwd()+"/data/ft.p", "wb"))
     tagger = treetaggerwrapper.TreeTagger(TAGLANG="it")
-    graph = connection.connect(conf)
-    df_read = graph_to_pandas(graph,query="Paragraph")
+    #graph = connection.connect(conf)
+    #df_read = graph_to_pandas(graph,query="Paragraph")
+    start = datetime.now()
+    print("start pickle at {}".format(start))
+    df_read = pickle.load(open(os.getcwd()+"/data/df_read.p", "rb"))
+    start = datetime.now()
+    print("end pickle at {}".format(start))
     testo = conf.get("ITEMS","testo")
     df_read = df_read[df_read['translation'].notna()]
     df_read = df_read[df_read['translation'].map(len) > 400]
-    df_read = df_read.sample(1100)
+    #df_read = df_read.sample(1100)
     start = datetime.now()
     print("start get all letters id at {}".format(start))
-    df_read = get_all_letters(graph=graph,df=df_read)
+    #df_read = get_all_letters(graph=graph,df=df_read)
     print("rows before dropping duplicates are {}".format(df_read.shape[0]))
-    df_read = df_read.drop_duplicates(subset="letter_id")
+    #df_read = df_read.drop_duplicates(subset="letter_id")
     print("rows after dropping duplicates are {}".format(df_read.shape[0]))
     #text_testing = df_read.iloc[0,4]
     #dict_text = create_vocabulary(text_testing)
@@ -158,15 +168,31 @@ if __name__ == '__main__':
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-varie.txt', stopwords=stopwords)
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-verbi.txt', stopwords=stopwords)
     cleaned_corpus = cleaner.clean_text(df_read, conf, stopwords=stopwords, tagger=tagger, column='translation')
-    text_testing = cleaned_corpus[3]
-    dict_text = create_vocabulary(text_testing)
+    end = datetime.now()
+    print("end get stopwords at {}".format(end))
+    #text_testing = cleaned_corpus[3]
+    words = 'guerra corona soldati vendetta papa perdere'
+    list_words = words.split(" ")
+    text_testing = get_neighbors(list_words, ft=ft, k=10,tuple=True)
+    print ("before cleaning 2")
+    print(text_testing)
+
+    cleaned_corpus[3] = text_testing
+    cleaned_corpus[3] = cleaner.removeNonAlpha(cleaned_corpus[3])
+    cleaned_corpus[3] = cleaner.removeStopWords(cleaned_corpus[3],conf,stopwords=stopwords,remove_short_words=False)
+    #cleaned_corpus[3] = cleaner.lemmatize(cleaned_corpus[3],tagger=ft)
+
+    #text_testing = get_neighbors(text_testing,ft=ft,k=5)
+    dict_text = create_vocabulary(cleaned_corpus[3])
     letter_name = df_read.iloc[3, 8]
     print(letter_name)
-    print(text_testing)
-    letter_all = df_read.letter_id.values
-    paragraph_id = df_read.id.values
-    combined_index = [x+'---'+y for x,y in zip(str(paragraph_id),letter_all)]
-    #cleaned_corpus = df_read.transcription.values.astype('U')
+    print("after cleaning 2")
+    print(cleaned_corpus[3])
+    df_read['let_par'] = [x + '---' + y for x, y in zip(df_read.letter_id.values, df_read.name.values)]
+    combined_index = df_read['let_par'].values
+
+    # Dump the variable tz into file save.p
+    #pickle.dump(df_read, open(os.getcwd()+"/data/df_read.p", "wb"))
     gens = False
     if gens:
         start = datetime.now()
@@ -175,9 +201,8 @@ if __name__ == '__main__':
         end = datetime.now()
         print("end gensim at {}".format(end))
     start = datetime.now()
-    print("start tf idf at {}".format(start))
+    # tempo di computazione tipo nullo
     df_tf_idf, raw_matrix = calculate_tf_idf(corpus=cleaned_corpus, vocabulary = dict_text, index=combined_index) # remember to fix index=row_id when you find id letter in paragraphs
-    end = datetime.now()
     print("end tf idf at {}".format(end))
     #df_tf_idf = converter.change_same_column(df_tf_idf)
     start = datetime.now()
@@ -209,7 +234,7 @@ if __name__ == '__main__':
         pass
     start = datetime.now()
     print("start saving bigw2vec at {}".format(start))
-    df_cosine.to_excel(os.getcwd()+conf.get("OUTPUT","bigw2vec")+datetime.now().strftime("%d-%m-%y-%H-%M-%S")+".xlsx")
+    #df_cosine.to_excel(os.getcwd()+conf.get("OUTPUT","bigw2vec")+datetime.now().strftime("%d-%m-%y-%H-%M-%S")+".xlsx")
 
     start = datetime.now()
     print("finished saving bigw2vec at {}".format(start))
@@ -228,6 +253,6 @@ if __name__ == '__main__':
         dict_list.append(dict)
 
     best_df = pd.DataFrame(dict_list,columns=['letters','value'])
-    best_df.to_excel(os.getcwd() + conf.get("OUTPUT", "best_df") + datetime.now().strftime("%d-%m-%y-%H-%M-%S") + ".xlsx")
+    #best_df.to_excel(os.getcwd() + conf.get("OUTPUT", "best_df") + datetime.now().strftime("%d-%m-%y-%H-%M-%S") + ".xlsx")
 
     print(datetime.now() - begin)
