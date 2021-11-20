@@ -86,6 +86,12 @@ def clean_text(df,conf,stopwords,tagger,column='testo'):
         cleaned_corpus.append(elem)
     return cleaned_corpus
 
+def clean_new_letter(letter,conf,stopwords):
+    #letter = removeNonAlpha(letter)
+    #letter = letter.split(" ")
+    letter = removeStopWords(letter, conf=conf, stopwords=stopwords)
+    return letter
+
 
 
 
