@@ -67,25 +67,28 @@ def create_new_letter_vector(text,letter_name,model,df_tf_idf):
 
 def calculate_similarity(paragraph,model,df_tf_idf,df_read,constant):
     index_paragraph_list = list(df_tf_idf.index)
+    index_old_paragraphs = index_paragraph_list= index_paragraph_list[:-1]
     df_word_vector_new_letter,mean_vector_new_letter = create_new_letter_vector(text=cleaned_corpus[-1],letter_name="new_letter",model=ft,df_tf_idf=df_tf_idf)
+    new_dict = {"paragraph_name":"new_letter","mean_vector":list(mean_vector_new_letter)}
     dict_cosine_list = []
     counter = 0
-    for elem in index_paragraph_list:
+    start = datetime.now()
+    print("start cosine at {}".format(start))
+    for elem in index_old_paragraphs:
         df_word_vector,mean_vector = create_document_vector(paragraph=df_read.loc[df_read.index[counter],"translation"],paragraph_id=elem,model=model,df_tf_idf=df_tf_idf,constant=constant)
-        try:
-            cosine_sim_value = 1 - spatial.distance.cosine(mean_vector_new_letter, mean_vector)
-            cosine_sim_value = np.round(cosine_sim_value,5)
-        except:
-            cosine_sim_value = 0
-            print("invalid value in float scalars")
-            counter = counter+1
-            print(counter)
-        dict = {"paragraph_name":elem,"cosine_similarity":cosine_sim_value}
+        dict = {"paragraph_name":elem,"mean_vector":list(mean_vector)}
         dict_cosine_list.append(dict)
         counter = counter+1
-    df_cosine_final = pd.DataFrame(dict_cosine_list)
+    start = datetime.now()
+    print("end cosine at {}".format(start))
+    dict_cosine_list.insert(0,new_dict)
+    big_df = pd.DataFrame(dict_cosine_list)
+    big_df_new = pd.DataFrame(big_df['mean_vector'].to_list(), index=big_df.paragraph_name)
+    indexes = list(big_df_new.index)
+    cosine_sim = np.round(cosine_similarity(big_df_new, big_df_new), 10)
+    df_cosine = pd.DataFrame(cosine_sim, index=indexes, columns=[indexes])
     print(1)
-    return df_cosine_final
+    return df_cosine
 
 def create_new_df_matrix (df_read,dict):
     a=1
@@ -115,10 +118,12 @@ if __name__ == '__main__':
     print(df_read.shape)
     testo = conf.get("ITEMS","testo")
     df_read = df_read[df_read['translation'].notna()]
-    df_read = df_read[df_read['translation'].map(len) > 400]
-    #df_read = df_read.sample(1100)
+    df_read = df_read[df_read['translation'].map(len) > 600]
+    #df_read = df_read.sample(16000)
     end = datetime.now()
-
+    print(df_read.shape)
+    # df_read = pickle.load(open(os.getcwd()+"/data/df_read.second", "rb"))
+    print(df_read.shape)
     stopwords = get_stop_words('it')
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-aggettivi.txt', stopwords=stopwords)
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-varie.txt', stopwords=stopwords)
