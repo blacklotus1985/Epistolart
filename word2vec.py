@@ -15,7 +15,6 @@ from sklearn.decomposition import PCA
 from gensim.models import TfidfModel
 from gensim.corpora import Dictionary
 import pickle
-import rake
 
 
 def avg_w2vec(tf_idf_matrix,model):

@@ -5,7 +5,7 @@ import os
 def get_conf():
     conf = configparser.ConfigParser()
     main_path = os.getcwd()
-    conf.read(main_path + '\configurations\configurations.ini')
+    conf.read(main_path + '/configurations/configurations.ini')
     return conf
 
 def connect(conf):

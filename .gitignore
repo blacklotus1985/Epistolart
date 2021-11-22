@@ -127,3 +127,4 @@ dmypy.json
 data/cc.it.300.bin
 *.xlsx
 *.csv
+*.bin.gz
