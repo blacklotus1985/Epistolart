@@ -58,7 +58,7 @@ def get_parameters():
     return conf,main_path,path,ft,df_read,tagger,graph
 
 
-def cleaning(df_read,conf,text):
+def cleaning(df_read,conf,text,main_path,tagger):
     """
     cleaning of letter recieved by user and creating new index to find letter_paragraph
     :param df_read: pandas dataframe of paragraphs
@@ -67,7 +67,7 @@ def cleaning(df_read,conf,text):
     :return: dataframe cleaned and filtered with added column of letter_paragraph, corpus cleaned, list of letter_paragraph names
     """
     df_read = df_read[df_read['translation'].notna()]
-    df_read = df_read[df_read['translation'].map(len) > conf.getInt("INPUT","min_len")]
+    df_read = df_read[df_read['translation'].map(len) > conf.getint("ITEMS","min_len")]
     stopwords = get_stop_words('it')
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-aggettivi.txt', stopwords=stopwords)
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-varie.txt', stopwords=stopwords)
@@ -78,7 +78,7 @@ def cleaning(df_read,conf,text):
     df_read['let_par'] = [x + '---' + y for x, y in zip(df_read.letter_id.values, df_read.name.values)]
     combined_index = list(df_read['let_par'].values)
     combined_index.append("new_letter")
-    return df_read,cleaned_corpus,combined_index
+    return df_read,cleaned_corpus,combined_index,new_letter_cleaned
 
 def create_document_vector(paragraph,paragraph_id,model,df_tf_idf,constant):
     """
@@ -124,8 +124,13 @@ def create_new_letter_vector(text,letter_name,model,df_tf_idf):
 
 
 
-def get_dict():
-    dict_text = word2vec.create_vocabulary(dict_first_letter["Ricerca libera"],dict_first_letter)
+def get_dict(text_of_letter):
+    """
+    creates vocabulary for tf idf calculus
+    :param text_of_letter: text of letter of user
+    :return: dictionary for tf idf
+    """
+    dict_text = word2vec.create_vocabulary(text_of_letter)
     return dict_text
 
 def calculate_cosine_similarity(cleaned_corpus,dict_text,combined_index):
@@ -139,7 +144,7 @@ def calculate_cosine_similarity(cleaned_corpus,dict_text,combined_index):
     df_tf_idf, raw_matrix = word2vec.calculate_tf_idf(corpus=cleaned_corpus, vocabulary=dict_text,index=combined_index)
     return df_tf_idf
 
-def calculate_similarity(model,df_tf_idf,df_read,constant,new_text,letter_name,conf,sort=True,print=True):
+def calculate_letters_similarity(model,df_tf_idf,df_read,constant,new_text,letter_name,conf,sort=True):
     """
     calculates similarity of all letters with the user's letter
     :param model: fast text model
@@ -159,18 +164,12 @@ def calculate_similarity(model,df_tf_idf,df_read,constant,new_text,letter_name,c
     new_dict = {"paragraph_name":"new_letter","mean_vector":list(mean_vector_new_letter)}
     dict_cosine_list = []
     counter = 0
-    if print:
-        start = datetime.now()
-        print("start cosine at {}".format(start))
     for elem in index_old_paragraphs:
-        df_word_vector,mean_vector = create_document_vector(paragraph=df_read.loc[df_read.index[counter],conf.get("INPUT","translation")],
+        df_word_vector,mean_vector = create_document_vector(paragraph=df_read.loc[df_read.index[counter],conf.get("ITEMS","text_field")],
                                                             paragraph_id=elem,model=model,df_tf_idf=df_tf_idf,constant=constant)
         dict = {"paragraph_name":elem,"mean_vector":list(mean_vector)}
         dict_cosine_list.append(dict)
         counter = counter+1
-    if print:
-        start = datetime.now()
-        print("end cosine at {}".format(start))
     dict_cosine_list.insert(0,new_dict)
     big_df = pd.DataFrame(dict_cosine_list)
     big_df_new = pd.DataFrame(big_df['mean_vector'].to_list(), index=big_df.paragraph_name)
@@ -180,7 +179,7 @@ def calculate_similarity(model,df_tf_idf,df_read,constant,new_text,letter_name,c
     if sort:
         df_cosine = df_cosine.T
     df_cosine = df_cosine.sort_values("new_letter", ascending=False)
-    df_cosine = df_cosine.head(conf.get("INPUT","records"))
+    df_cosine = df_cosine.head(conf.getint("ITEMS","records"))
     return df_cosine
 
 
@@ -244,7 +243,7 @@ if __name__ == '__main__':
                                              index=combined_index)  # remember to fix index=row_id when you find id letter in paragraphs
     end = datetime.now()
     print("start mean vector at {}".format(end))
-    df_final = calculate_similarity(paragraph=new["Ricerca libera"],model=ft,df_tf_idf=df_tf_idf,df_read=df_read,constant=0)
+    df_final = calculate_letters_similarity(paragraph=new["Ricerca libera"],model=ft,df_tf_idf=df_tf_idf,df_read=df_read,constant=0)
     df_final.to_excel(os.getcwd() + conf.get("OUTPUT", "average_df") + datetime.now().strftime("%d-%m-%y-%H-%M-%S") + ".xlsx")
 
     #df_paragraph, mean_vector = create_document_vector(paragraph=df_read.iloc[1,4],paragraph_id=df_tf_idf.index[4],model=ft,df_tf_idf=df_tf_idf,constant=0)
