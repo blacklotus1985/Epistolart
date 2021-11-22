@@ -22,24 +22,74 @@ from sklearn.metrics.pairwise import cosine_similarity
 from scipy import spatial
 
 new = {
-"Mittente": "Alex",
+"Mittente": "Averardo Medici di Castellina-Curzio Picchena-11/08/1624-20214",
 "Destinatario": "Francesco",
 "Luogo di spedizione":"Firenze",
 "Giorno di spedizione":28,
 "Mese di spedizione":9,
 "Anno di spedizione":1570,
-"Ricerca libera":"Perché fino adesso non  è stare di bisogno scrìvere, e per non avere lo cuore lietto e iscrivendo altro che cose importante, bisognerebbe scrìvere lamentazione più che quelle di Geremia, per fino adesso non t'ho scrìvere. E perché fa di necessità scrìvere, mi suono messo a farlo. E la causa è che e' nostro Lucca Paganelli ha opposto qui alla mercanzìa, che per essere èssere le ragioni, donde dipende e' débito Aretino, non lo potere stringere di qua, di sorte che avere fatto, come chi zappa i[n] rena, che quanto più zappa, manco lavorare e basta. "
-}
-
+"Ricerca_libera":"...] Preso che V.A avere per se un paramento che io il mandare col suo letto et uno studiolo non il paio grave di donare al Sig.r Duca Ferdinando I Gonzaga per mio parte un tavolino col suo piede et quanto a una cassa di greco che con il suddetto roba s' inviare per pareggiare il soma ...]"}
 json_new = json.dumps(new)
 
 dict_first_letter = json.loads(json_new)
 
-def get_text(new_json,text="Ricerca_libera"):
-    dict = json.dumps(new_json)
-    return dict[text]
+def json_to_dict(json_letter,text = "Ricerca_libera"):
+    """
+    transform json into dictionary
+    :param json_letter: new letter from user
+    :param text: field of json in which text of letter is kept
+    :return: dictionary of json and the text of the letter
+    """
+    dict_first_letter = json.dumps(json_letter)
+    return dict_first_letter,dict_first_letter[text]
+
+def get_parameters():
+    """
+    get parameters required for algorithm
+    :return: configuration, main path of project, path of this file, fast text  w2vec model, pickled file of database, treetagger model, graph db connection
+    """
+    conf = connection.get_conf()
+    main_path = os.getcwd()
+    path = os.path.dirname(os.getcwd())
+    ft = fasttext.load_model(main_path + '/data/cc.it.300.bin')
+    df_read = pickle.load(open(os.getcwd() + "/data/df_read.fourth", "rb"))
+    tagger = treetaggerwrapper.TreeTagger(TAGLANG="it")
+    graph = connection.connect(conf)
+    return conf,main_path,path,ft,df_read,tagger,graph
+
+
+def cleaning(df_read,conf,text):
+    """
+    cleaning of letter recieved by user and creating new index to find letter_paragraph
+    :param df_read: pandas dataframe of paragraphs
+    :param conf: configuration file
+    :param text: text to clean
+    :return: dataframe cleaned and filtered with added column of letter_paragraph, corpus cleaned, list of letter_paragraph names
+    """
+    df_read = df_read[df_read['translation'].notna()]
+    df_read = df_read[df_read['translation'].map(len) > conf.getInt("INPUT","min_len")]
+    stopwords = get_stop_words('it')
+    stopwords = cleaner.add_stopwords(main_path + '/data/stp-aggettivi.txt', stopwords=stopwords)
+    stopwords = cleaner.add_stopwords(main_path + '/data/stp-varie.txt', stopwords=stopwords)
+    stopwords = cleaner.add_stopwords(main_path + '/data/stp-verbi.txt', stopwords=stopwords)
+    cleaned_corpus = cleaner.clean_text(df_read, conf, stopwords=stopwords, tagger=tagger, column='translation')
+    new_letter_cleaned = cleaner.clean_new_letter(letter=text, conf=conf, stopwords=stopwords)
+    cleaned_corpus.append(new_letter_cleaned)
+    df_read['let_par'] = [x + '---' + y for x, y in zip(df_read.letter_id.values, df_read.name.values)]
+    combined_index = list(df_read['let_par'].values)
+    combined_index.append("new_letter")
+    return df_read,cleaned_corpus,combined_index
 
 def create_document_vector(paragraph,paragraph_id,model,df_tf_idf,constant):
+    """
+    creates document embedding weighted with tf idf
+    :param paragraph: text to analyze
+    :param paragraph_id: paragraph id in the df_tf_idf matrix
+    :param model: fast text model
+    :param df_tf_idf: dataframe of tf_idf
+    :param constant: costant to multiply non existing words (default is 0)
+    :return: dataframe of each word in text with w2vec embedding, mean vector representation of document
+    """
     list = []
     list_paragraph = paragraph.split(" ")
     for word in list_paragraph:
@@ -54,6 +104,14 @@ def create_document_vector(paragraph,paragraph_id,model,df_tf_idf,constant):
     return df_word_vector,mean_vector
 
 def create_new_letter_vector(text,letter_name,model,df_tf_idf):
+    """
+    creates the vector of the new letter passed by user
+    :param text: text passed by user
+    :param letter_name: letter name passed by user, by default called "new_letter"
+    :param model: fast text model
+    :param df_tf_idf: dataframe of tf_idf
+    :return:
+    """
     list = []
     list_paragraph = text.split(" ")
     for word in list_paragraph:
@@ -65,37 +123,65 @@ def create_new_letter_vector(text,letter_name,model,df_tf_idf):
     return df_word_vector, mean_vector
 
 
-def calculate_similarity(paragraph,model,df_tf_idf,df_read,constant):
+
+def get_dict():
+    dict_text = word2vec.create_vocabulary(dict_first_letter["Ricerca libera"],dict_first_letter)
+    return dict_text
+
+def calculate_cosine_similarity(cleaned_corpus,dict_text,combined_index):
+    """
+    calculates tf_idf of all documents in database and the new letter from user
+    :param cleaned_corpus: list of text letters with also the user letter
+    :param dict_text: vocabulary to use for tf_idf based on user's letter
+    :param combined_index: composed index to identify letter---paragraph
+    :return: dataframe of tf_idf
+    """
+    df_tf_idf, raw_matrix = word2vec.calculate_tf_idf(corpus=cleaned_corpus, vocabulary=dict_text,index=combined_index)
+    return df_tf_idf
+
+def calculate_similarity(model,df_tf_idf,df_read,constant,new_text,letter_name,conf,sort=True,print=True):
+    """
+    calculates similarity of all letters with the user's letter
+    :param model: fast text model
+    :param df_tf_idf: dataframe of tf_idf
+    :param df_read: dataframe of database letters
+    :param constant: costant to multiply non existing words (default is 0)
+    :param new_text: new letter of user
+    :param letter_name: letter name of user
+    :param conf: configuration file
+    :param sort: boolean to achieve or not sorted results
+    :param print: boolean to print time of running code
+    :return: dataframe of cosine similarities
+    """
     index_paragraph_list = list(df_tf_idf.index)
-    index_old_paragraphs = index_paragraph_list= index_paragraph_list[:-1]
-    df_word_vector_new_letter,mean_vector_new_letter = create_new_letter_vector(text=cleaned_corpus[-1],letter_name="new_letter",model=ft,df_tf_idf=df_tf_idf)
+    index_old_paragraphs = index_paragraph_list[:-1]
+    df_word_vector_new_letter,mean_vector_new_letter = create_new_letter_vector(text=new_text,letter_name=letter_name,model=model,df_tf_idf=df_tf_idf)
     new_dict = {"paragraph_name":"new_letter","mean_vector":list(mean_vector_new_letter)}
     dict_cosine_list = []
     counter = 0
-    start = datetime.now()
-    print("start cosine at {}".format(start))
+    if print:
+        start = datetime.now()
+        print("start cosine at {}".format(start))
     for elem in index_old_paragraphs:
-        df_word_vector,mean_vector = create_document_vector(paragraph=df_read.loc[df_read.index[counter],"translation"],paragraph_id=elem,model=model,df_tf_idf=df_tf_idf,constant=constant)
+        df_word_vector,mean_vector = create_document_vector(paragraph=df_read.loc[df_read.index[counter],conf.get("INPUT","translation")],
+                                                            paragraph_id=elem,model=model,df_tf_idf=df_tf_idf,constant=constant)
         dict = {"paragraph_name":elem,"mean_vector":list(mean_vector)}
         dict_cosine_list.append(dict)
         counter = counter+1
-    start = datetime.now()
-    print("end cosine at {}".format(start))
+    if print:
+        start = datetime.now()
+        print("end cosine at {}".format(start))
     dict_cosine_list.insert(0,new_dict)
     big_df = pd.DataFrame(dict_cosine_list)
     big_df_new = pd.DataFrame(big_df['mean_vector'].to_list(), index=big_df.paragraph_name)
     indexes = list(big_df_new.index)
-    cosine_sim = np.round(cosine_similarity(big_df_new, big_df_new), 10)
+    cosine_sim = np.round(cosine_similarity(big_df_new, big_df_new), 8)
     df_cosine = pd.DataFrame(cosine_sim, index=indexes, columns=[indexes])
-    print(1)
+    if sort:
+        df_cosine = df_cosine.T
+    df_cosine = df_cosine.sort_values("new_letter", ascending=False)
+    df_cosine = df_cosine.head(conf.get("INPUT","records"))
     return df_cosine
-
-def create_new_df_matrix (df_read,dict):
-    a=1
-
-
-
-
 
 
 if __name__ == '__main__':
@@ -116,7 +202,7 @@ if __name__ == '__main__':
     print(df_read.shape)
     #df_read = pickle.load(open(os.getcwd()+"/data/df_read.second", "rb"))
     print(df_read.shape)
-    testo = conf.get("ITEMS","testo")
+    #testo = conf.get("ITEMS","testo")
     df_read = df_read[df_read['translation'].notna()]
     df_read = df_read[df_read['translation'].map(len) > 600]
     #df_read = df_read.sample(16000)
@@ -136,25 +222,18 @@ if __name__ == '__main__':
     #df_read = df_read.append(dict, ignore_index=True)
     end = datetime.now()
     print("end cleaned all stopwords at {}".format(end))
-    end = datetime.now()
-    print("end get stopwords at {}".format(end))
     # text_testing = cleaned_corpus[3]
-    words = 'Statua Arte Dipinto Papa Amore Colore Ritratto'
-    list_words = words.split(" ")
+    #words = 'Statua Arte Dipinto Papa Amore Colore Ritratto'
+    #list_words = words.split(" ")
     # text_testing = get_neighbors(list_words, ft=ft, k=10,tuple=True)
     print("before cleaning 2")
     # print(text_testing)
-
     # cleaned_corpus[3] = text_testing
     # cleaned_corpus[3] = cleaner.removeNonAlpha(cleaned_corpus[3])
     # cleaned_corpus[3] = cleaner.removeStopWords(cleaned_corpus[3],conf,stopwords=stopwords,remove_short_words=False)
     # cleaned_corpus[3] = cleaner.lemmatize(cleaned_corpus[3],tagger=ft)
-
     # text_testing = get_neighbors(text_testing,ft=ft,k=5)
     dict_text = word2vec.create_vocabulary(dict_first_letter["Ricerca libera"])
-    letter_name = df_read.iloc[1, 8]
-    # print(letter_name)
-    # print(cleaned_corpus[3])
     df_read['let_par'] = [x + '---' + y for x, y in zip(df_read.letter_id.values, df_read.name.values)]
     combined_index = list(df_read['let_par'].values)
     combined_index.append("new_letter")
