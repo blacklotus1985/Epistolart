@@ -2,6 +2,16 @@
 import os
 from datetime import datetime
 import smooth_inverse
+import word2vec
+"""
+1) amore desiderio passione cupidigia brama
+2) sdegno ira rabbia collera disprezzo
+3) coraggio osare rischiare ardimento temerarietà
+4) onore gloria fama patria fedeltà 
+5) amore passione onore gloria fama
+6) sdegno ira delusione smarrimento illusione
+7) orgoglio vergogna rabbia amarezza delusione
+"""
 
 if __name__ == '__main__':
     new = {
@@ -11,19 +21,28 @@ if __name__ == '__main__':
     "Giorno di spedizione":28,
     "Mese di spedizione":9,
     "Anno di spedizione":1570,
-    "Ricerca libera":"...] Preso che V.A avere per se un paramento che io il mandare col suo letto et uno studiolo non il paio grave di donare al Sig.r Duca Ferdinando I Gonzaga per mio parte un tavolino col suo piede et quanto a una cassa di greco che con il suddetto roba s' inviare per pareggiare il soma ...]"}
-
+    "Ricerca_libera":"amore desiderio passione cupidigia brama"}
     begin = datetime.now()
     print(begin)
-    text_of_letter = new["Ricerca libera"]
+    text_of_letter = new["Ricerca_libera"]
+
+    text_title = new["Ricerca_libera"]
     #json_new = json.dumps(new) #### ATTENZIONE ricordarsi funzione per trasformare json in dizionario qua fingo di avere gia dizionario
 
     #dict_first_letter,text_of_letter = smooth_inverse.json_to_dict(new, text="Ricerca libera")
 
-    conf,main_path,path,ft,df_read,tagger,graph = smooth_inverse.get_parameters()
+    conf,main_path,path,ft,df_read,tagger,graph = smooth_inverse.get_parameters(load=True,item="Paragraph")
+
+    graph_let,db_letter = smooth_inverse.connect_db(conf=conf, item="Letter")
+
+
+    df_read = df_read[df_read.letter_id.str.startswith("Francesco Guicciardini")]
+
+    text_of_letter = word2vec.get_neighbors(text_of_letter.split(" "),ft=ft,k=15,tuple=True)
+
 
     df_read,cleaned_corpus,combined_index,new_letter_cleaned = smooth_inverse.cleaning(df_read=df_read,conf=conf,text=text_of_letter,main_path=main_path
-                                                                                       ,tagger=tagger)
+                                                                                 ,tagger=tagger)
 
     vocab_dict = smooth_inverse.get_dict(text_of_letter=new_letter_cleaned)
 
@@ -33,6 +52,10 @@ if __name__ == '__main__':
                                                 conf=conf,sort=True)
 
     df_cosine.to_excel(os.getcwd() + conf.get("OUTPUT", "average_df") + datetime.now().strftime("%d-%m-%y-%H-%M-%S") + ".xlsx")
+
+    df_final_for_test = smooth_inverse.create_test_df(df_cosine=df_cosine,df_read=df_read,graph=graph,query="Letter")
+
+    df_final_for_test.to_excel(os.getcwd() + "/output/" + text_title + datetime.now().strftime("%d-%m-%y-%H-%M-%S") + ".xlsx")
 
     end = datetime.now()
     print(end)

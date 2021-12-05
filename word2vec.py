@@ -135,10 +135,10 @@ if __name__ == '__main__':
     main_path = os.getcwd()
     path = os.path.dirname(os.getcwd())
     ft = fasttext.load_model(main_path + '/data/cc.it.300.bin')
-    tagger = treetaggerwrapper.TreeTagger(TAGLANG="it")
+    tagger = treetaggerwrapper.TreeTagger(TAGLANG="it",TAGDIR="/home/alex/Scaricati")
     #graph = connection.connect(conf)
     #df_read = graph_to_pandas(graph,query="Paragraph")
-    df_read = pickle.load(open(os.getcwd()+"/data/df_read.second", "rb"))
+    df_read = pickle.load(open(os.getcwd()+"/data/df_read.fourth", "rb"))
     print(df_read.shape)
     testo = conf.get("ITEMS","testo")
     df_read = df_read[df_read['translation'].notna()]
@@ -149,7 +149,7 @@ if __name__ == '__main__':
     if rk:
         end = datetime.now()
         print("start rake at {}".format(end))
-        kw = rake.extract_keywords(df_read.loc[3], lang=None)
+        #kw = rake.extract_keywords(df_read.loc[3], lang=None)
         end = datetime.now()
         print("end rake at {}".format(end))
     print("start get stopwords at {}".format(end))
@@ -161,7 +161,8 @@ if __name__ == '__main__':
     end = datetime.now()
     print("end get stopwords at {}".format(end))
     #text_testing = cleaned_corpus[3]
-    words = 'Statua Arte Dipinto Papa Amore Colore Ritratto'
+    words = "Io ho ordinato a certi amici mia, che mi fare alcuni sonetti per farro l'uffizio, mi chiedesti: che seno n'è ammalati due dare' meglio, del che non so come vino servire; pure vedrò fare sforzo, che avere qualcosa. Io non son tornato da Lucca primo che iersera e ho lasciare morto messer Biagio Mei, autore dell'òpera che io ho fatto in Lucca e son disperato per la pèrdita di più cose, che vino saranno un dì conte nel miglio visitarvi. Se io non arò i sonetti, vino manderò due mie lettere quest'altro sàbato: intanto si rinfrescherà e potrete meglio usarle. Io stare, come io pozzo, non come io dovere; e questo nàscere dal miglio esser troppo alle altrui voglie. Ma seno ‘l diàvolo mi spingere un tratto in costà, che potere esser di corto, ‘agroncando' le cose turchesche nel reame, sarò forzato non ne cavar piede. Intanto io resto vostro, con tutto che messer Ottaviano voglia la baia nel miglio ritorno a Roma, come seno io avessi da lei ricevere un papato. È finita; basta andare in là. Di voi so che n'è ‘massa buono'; e io gramo stare qui a spettar, che piova. Intanto io resto a comandi vostri."
+
     list_words = words.split(" ")
     #text_testing = get_neighbors(list_words, ft=ft, k=10,tuple=True)
     print ("before cleaning 2")
@@ -173,8 +174,8 @@ if __name__ == '__main__':
     #cleaned_corpus[3] = cleaner.lemmatize(cleaned_corpus[3],tagger=ft)
 
     #text_testing = get_neighbors(text_testing,ft=ft,k=5)
-    dict_text = create_vocabulary(cleaned_corpus[3])
-    letter_name = df_read.iloc[3, 8]
+    dict_text = create_vocabulary(words)
+    letter_name = "Giorgio Vasari-Francesco Leoni-09/08/1544-568"
     #print(letter_name)
     #print(cleaned_corpus[3])
     df_read['let_par'] = [x + '---' + y for x, y in zip(df_read.letter_id.values, df_read.name.values)]

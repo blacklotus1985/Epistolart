@@ -23,13 +23,13 @@ from scipy import spatial
 
 
 new = {
-"Mittente": "Averardo Medici di Castellina-Curzio Picchena-11/08/1624-20214",
+"Mittente": "'Giorgio Vasari-Francesco Leoni-09/08/1544-568'",
 "Destinatario": "Francesco",
 "Luogo di spedizione":"Firenze",
 "Giorno di spedizione":28,
 "Mese di spedizione":9,
 "Anno di spedizione":1570,
-"Ricerca_libera":"...] Preso che V.A avere per se un paramento che io il mandare col suo letto et uno studiolo non il paio grave di donare al Sig.r Duca Ferdinando I Gonzaga per mio parte un tavolino col suo piede et quanto a una cassa di greco che con il suddetto roba s' inviare per pareggiare il soma ...]"}
+"Ricerca_libera":"Mercoledì in una Congregazione de Agostiniani, che fù tenuta avanti S. B. [Alexander VII] fù stabilita la canonizazione d Beato Tomaso di VIllanova Agostiniano che dovrà farsi il primo giorno di novembre prossimo a spese della Religione. Discorrendosi della compra di Farnese pare che ha stata fatta à caro prezzo essendosi calculata à uno e mezzo percento con qualche dubbio d'intoppi, ma non è mancato che hà detto che meno so considero questo, che il gusto di haver quel luogo della Casa Farnese in ricompensa di quello [che] tiene la medesima della Casa Chigi [...] La Regina [Kristina Wasa] è ben guarita, et fù giovedì a vedere il giardino di S. Pietro et mentre è stata in letto N. S. ha mandato il suo medico [Matteo] Naldi a servirla continuamente, et nel medesimo tempo si è accrescuito un'altro Corpo di Guardia nella piazza di Monte Cavallo [...] Sono arrivati qui da Livorno dui Inglesi che dicono esser stati a Constantinapoli, et si fanno conoscere si Setta Tremolanti: Dicono che lo Spirito Santo li suggerisce cio che devono fare, et dire, et che son fuora con fine di corregiere li errori del Mondo. Hanno chiesto con gran premura audienza dal Papa, ma son stati messi in prigione, dove dicono  grandissime heresia, et moltissime pazzie mostrandosi più tosto pazzi, che furbi; parlano però lingua latina benche con qualche rozzezza, et mostrano di haver cognitione di lettere. Iermattina si tenne l'esame de' Vescovi dove tra quattro soggetti passò un Spagnolo per il Vescovato di Patti, et il Padre Mei Lucchese per Bisignano portato da favori della Signora Leonora Musica.  Ci son qui molti ammalati di catarri e infreddature, che si liberano con una o dui febbri. Il Signore Ammiraglio Sergardi si trova in letto per tale accidente et doppo essersi cavato sangue si è liberato ma non esce per ancora […]"}
 json_new = json.dumps(new)
 
 dict_first_letter = json.loads(json_new)
@@ -44,7 +44,20 @@ def json_to_dict(json_letter,text = "Ricerca_libera"):
     dict_first_letter = json.dumps(json_letter)
     return dict_first_letter,dict_first_letter[text]
 
-def get_parameters():
+def connect_db(conf,item="Paragraph"):
+    """
+    connect to db
+    :param conf: configuration parameters
+    :return: graph and dataframe
+    """
+    graph = connection.connect(conf)
+    df_read = word2vec.graph_to_pandas(graph,query=item)
+
+    return graph,df_read
+
+
+
+def get_parameters(load, item="Paragraph"):
     """
     get parameters required for algorithm
     :return: configuration, main path of project, path of this file, fast text  w2vec model, pickled file of database, treetagger model, graph db connection
@@ -53,9 +66,12 @@ def get_parameters():
     main_path = os.getcwd()
     path = os.path.dirname(os.getcwd())
     ft = fasttext.load_model(main_path + '/data/cc.it.300.bin')
-    df_read = pickle.load(open(os.getcwd() + "/data/df_read.fourth", "rb"))
-    tagger = treetaggerwrapper.TreeTagger(TAGLANG="it",TAGDIR="/home/alex/Scaricati")
-    graph = connection.connect(conf)
+    tagger = treetaggerwrapper.TreeTagger(TAGLANG="it", TAGDIR="/home/alex/Scaricati")
+    if not load:
+        df_read = pickle.load(open(os.getcwd() + "/data/df_read.fourth", "rb"))
+        graph = connection.connect(conf)
+    else:
+        graph,df_read = connect_db(conf,item)
     return conf,main_path,path,ft,df_read,tagger,graph
 
 
@@ -182,4 +198,31 @@ def calculate_letters_similarity(model,df_tf_idf,df_read,constant,new_text,lette
     df_cosine = df_cosine.sort_values("new_letter", ascending=False)
     df_cosine = df_cosine.head(conf.getint("ITEMS","records"))
     return df_cosine
+
+def create_test_df(df_cosine,df_read,graph,query="Letter"):
+    start = datetime.now()
+    print ("start load db at {}".format(start))
+
+    db_letter = word2vec.graph_to_pandas(graph,query=query)
+    start = datetime.now()
+    print("end load db at {}".format(start))
+    df_cosine = df_cosine.iloc[1:, :]
+    df_cosine.loc[df_cosine['new_letter'] >0]
+    similarity_values = df_cosine.iloc[:,0].values
+    counter = 0
+    dict_list = []
+    for elem in df_cosine.index:
+        id_composed = " ".join(elem)
+        id_letter = id_composed.split("---")[0]
+        id_paragraph = id_composed.split("---")[1]
+        text_letter = db_letter[db_letter.letter_id==id_letter]
+        text_letter = text_letter.transcription.values[0]
+        parag_text = df_read[df_read.let_par == df_cosine.index[counter][0]]
+        parag_text = parag_text.text.values[0]
+        dict = {"letter_name":id_letter,"id_paragraph":id_paragraph,"text_letter":text_letter,"text_paragraph":parag_text,"similarity_value":similarity_values[counter]}
+        counter = counter +1
+        dict_list.append(dict)
+    df_final = pd.DataFrame(dict_list)
+    return df_final
+
 

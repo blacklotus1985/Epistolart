@@ -43,6 +43,7 @@ def removeStopWords(text,conf,stopwords,remove_short_words=True):
     if remove_short_words:
         words = [i for i in words if len(i) > conf.getint("ITEMS","min_len_words")]
     words = [word for word in words if not word in set(stopwords)]
+
     text = ' '.join(words)
     return text
 
@@ -74,6 +75,7 @@ def clean_text(df,conf,stopwords,tagger,column='testo'):
     cleaned_corpus = []
     for elem in df[column]:
         elem = removeNonAlpha(elem)
+        elem = elem.lower()
         '''
         try:
             elem = corrector.correct_letter(elem,debug=False)
