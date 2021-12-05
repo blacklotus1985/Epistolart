@@ -200,12 +200,7 @@ def calculate_letters_similarity(model,df_tf_idf,df_read,constant,new_text,lette
     return df_cosine
 
 def create_test_df(df_cosine,df_read,graph,query="Letter"):
-    start = datetime.now()
-    print ("start load db at {}".format(start))
-
     db_letter = word2vec.graph_to_pandas(graph,query=query)
-    start = datetime.now()
-    print("end load db at {}".format(start))
     df_cosine = df_cosine.iloc[1:, :]
     df_cosine.loc[df_cosine['new_letter'] >0]
     similarity_values = df_cosine.iloc[:,0].values
@@ -219,7 +214,7 @@ def create_test_df(df_cosine,df_read,graph,query="Letter"):
         text_letter = text_letter.transcription.values[0]
         parag_text = df_read[df_read.let_par == df_cosine.index[counter][0]]
         parag_text = parag_text.text.values[0]
-        dict = {"letter_name":id_letter,"id_paragraph":id_paragraph,"text_letter":text_letter,"text_paragraph":parag_text,"similarity_value":similarity_values[counter]}
+        dict = {"letter_name":id_letter,"similarity_value":similarity_values[counter],"text_letter":text_letter,"text_paragraph":parag_text,"paragraph_number":id_paragraph}
         counter = counter +1
         dict_list.append(dict)
     df_final = pd.DataFrame(dict_list)

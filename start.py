@@ -38,7 +38,8 @@ if __name__ == '__main__':
 
     df_read = df_read[df_read.letter_id.str.startswith("Francesco Guicciardini")]
 
-    text_of_letter = word2vec.get_neighbors(text_of_letter.split(" "),ft=ft,k=15,tuple=True)
+
+    text_of_letter = word2vec.get_neighbors(text_of_letter.split(" "),ft=ft,k=conf.getint("ITEMS","neighbors"),tuple=True)
 
 
     df_read,cleaned_corpus,combined_index,new_letter_cleaned = smooth_inverse.cleaning(df_read=df_read,conf=conf,text=text_of_letter,main_path=main_path
@@ -55,7 +56,7 @@ if __name__ == '__main__':
 
     df_final_for_test = smooth_inverse.create_test_df(df_cosine=df_cosine,df_read=df_read,graph=graph,query="Letter")
 
-    df_final_for_test.to_excel(os.getcwd() + "/output/" + text_title + datetime.now().strftime("%d-%m-%y-%H-%M-%S") + ".xlsx")
+    df_final_for_test.to_excel(os.getcwd() + "/test/" + text_title + " " + str(conf.getint("ITEMS","neighbors"))+"neighbors "  + datetime.now().strftime("%d-%m-%y-%H-%M-%S") + ".xlsx")
 
     end = datetime.now()
     print(end)
