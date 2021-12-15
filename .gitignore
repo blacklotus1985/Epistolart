@@ -128,3 +128,5 @@ data/cc.it.300.bin
 *.xlsx
 *.csv
 *.bin.gz
+logfile.log
+*.txt

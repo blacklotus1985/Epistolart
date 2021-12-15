@@ -2,34 +2,28 @@
 import pandas as pd
 import numpy as np
 import fasttext.util
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 import os
 from datetime import datetime
 from src import connection
 import treetaggerwrapper
 from src import cleaner
 from stop_words import get_stop_words
-import converter
-from sklearn.decomposition import PCA
-from gensim.models import TfidfModel
-from gensim.corpora import Dictionary
 import pickle
 import word2vec
 import numpy as np
 import json
 from sklearn.metrics.pairwise import cosine_similarity
-from scipy import spatial
-
+import logging
+import json
 
 new = {
 "Mittente": "'Giorgio Vasari-Francesco Leoni-09/08/1544-568'",
 "Destinatario": "Francesco",
-"Luogo di spedizione":"Firenze",
-"Giorno di spedizione":28,
-"Mese di spedizione":9,
-"Anno di spedizione":1570,
-"Ricerca_libera":"Mercoledì in una Congregazione de Agostiniani, che fù tenuta avanti S. B. [Alexander VII] fù stabilita la canonizazione d Beato Tomaso di VIllanova Agostiniano che dovrà farsi il primo giorno di novembre prossimo a spese della Religione. Discorrendosi della compra di Farnese pare che ha stata fatta à caro prezzo essendosi calculata à uno e mezzo percento con qualche dubbio d'intoppi, ma non è mancato che hà detto che meno so considero questo, che il gusto di haver quel luogo della Casa Farnese in ricompensa di quello [che] tiene la medesima della Casa Chigi [...] La Regina [Kristina Wasa] è ben guarita, et fù giovedì a vedere il giardino di S. Pietro et mentre è stata in letto N. S. ha mandato il suo medico [Matteo] Naldi a servirla continuamente, et nel medesimo tempo si è accrescuito un'altro Corpo di Guardia nella piazza di Monte Cavallo [...] Sono arrivati qui da Livorno dui Inglesi che dicono esser stati a Constantinapoli, et si fanno conoscere si Setta Tremolanti: Dicono che lo Spirito Santo li suggerisce cio che devono fare, et dire, et che son fuora con fine di corregiere li errori del Mondo. Hanno chiesto con gran premura audienza dal Papa, ma son stati messi in prigione, dove dicono  grandissime heresia, et moltissime pazzie mostrandosi più tosto pazzi, che furbi; parlano però lingua latina benche con qualche rozzezza, et mostrano di haver cognitione di lettere. Iermattina si tenne l'esame de' Vescovi dove tra quattro soggetti passò un Spagnolo per il Vescovato di Patti, et il Padre Mei Lucchese per Bisignano portato da favori della Signora Leonora Musica.  Ci son qui molti ammalati di catarri e infreddature, che si liberano con una o dui febbri. Il Signore Ammiraglio Sergardi si trova in letto per tale accidente et doppo essersi cavato sangue si è liberato ma non esce per ancora […]"}
+"origine":"Firenze",
+"giorno":28,
+"mese":9,
+"anno":1570,
+"ricercaLibera":"Mercoledì in una Congregazione de Agostiniani, che fù tenuta avanti S. B. [Alexander VII] fù stabilita la canonizazione d Beato Tomaso di VIllanova Agostiniano che dovrà farsi il primo giorno di novembre prossimo a spese della Religione. Discorrendosi della compra di Farnese pare che ha stata fatta à caro prezzo essendosi calculata à uno e mezzo percento con qualche dubbio d'intoppi, ma non è mancato che hà detto che meno so considero questo, che il gusto di haver quel luogo della Casa Farnese in ricompensa di quello [che] tiene la medesima della Casa Chigi [...] La Regina [Kristina Wasa] è ben guarita, et fù giovedì a vedere il giardino di S. Pietro et mentre è stata in letto N. S. ha mandato il suo medico [Matteo] Naldi a servirla continuamente, et nel medesimo tempo si è accrescuito un'altro Corpo di Guardia nella piazza di Monte Cavallo [...] Sono arrivati qui da Livorno dui Inglesi che dicono esser stati a Constantinapoli, et si fanno conoscere si Setta Tremolanti: Dicono che lo Spirito Santo li suggerisce cio che devono fare, et dire, et che son fuora con fine di corregiere li errori del Mondo. Hanno chiesto con gran premura audienza dal Papa, ma son stati messi in prigione, dove dicono  grandissime heresia, et moltissime pazzie mostrandosi più tosto pazzi, che furbi; parlano però lingua latina benche con qualche rozzezza, et mostrano di haver cognitione di lettere. Iermattina si tenne l'esame de' Vescovi dove tra quattro soggetti passò un Spagnolo per il Vescovato di Patti, et il Padre Mei Lucchese per Bisignano portato da favori della Signora Leonora Musica.  Ci son qui molti ammalati di catarri e infreddature, che si liberano con una o dui febbri. Il Signore Ammiraglio Sergardi si trova in letto per tale accidente et doppo essersi cavato sangue si è liberato ma non esce per ancora […]"}
 json_new = json.dumps(new)
 
 dict_first_letter = json.loads(json_new)
@@ -55,6 +49,9 @@ def connect_db(conf,item="Paragraph"):
 
     return graph,df_read
 
+def create_log():
+    logging.basicConfig(filename="logfile.log", level=logging.INFO)
+
 
 
 def get_parameters(load, item="Paragraph"):
@@ -66,12 +63,15 @@ def get_parameters(load, item="Paragraph"):
     main_path = os.getcwd()
     path = os.path.dirname(os.getcwd())
     ft = fasttext.load_model(main_path + '/data/cc.it.300.bin')
-    tagger = treetaggerwrapper.TreeTagger(TAGLANG="it", TAGDIR="/home/alex/Scaricati")
+    tagger = treetaggerwrapper.TreeTagger(TAGLANG="it", TAGDIR=conf.get("DIRECTORIES","tagdir"))
     if not load:
         df_read = pickle.load(open(os.getcwd() + "/data/df_read.fourth", "rb"))
         graph = connection.connect(conf)
     else:
         graph,df_read = connect_db(conf,item)
+        logging.info("dataframe shape before dropping duplicates is {}".format(df_read.shape))
+        df_read = df_read.drop_duplicates()
+        logging.info("dataframe shape after dropping duplicates is {}".format(df_read.shape))
     return conf,main_path,path,ft,df_read,tagger,graph
 
 
@@ -89,7 +89,7 @@ def cleaning(df_read,conf,text,main_path,tagger):
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-aggettivi.txt', stopwords=stopwords)
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-varie.txt', stopwords=stopwords)
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-verbi.txt', stopwords=stopwords)
-    cleaned_corpus = cleaner.clean_text(df_read, conf, stopwords=stopwords, tagger=tagger, column='translation')
+    cleaned_corpus = cleaner.clean_text(df_read, conf, stopwords=stopwords, column='translation')
     new_letter_cleaned = cleaner.clean_new_letter(letter=text, conf=conf, stopwords=stopwords)
     cleaned_corpus.append(new_letter_cleaned)
     df_read['let_par'] = [x + '---' + y for x, y in zip(df_read.letter_id.values, df_read.name.values)]
@@ -112,7 +112,10 @@ def create_document_vector(paragraph,paragraph_id,model,df_tf_idf,constant):
     for word in list_paragraph:
         if word in df_tf_idf.columns:
             tf_value = df_tf_idf.loc[paragraph_id,word]
-            dict = {"word": word, "vector": model.get_word_vector(word)*tf_value}
+            try:
+                dict = {"word": word, "vector": model.get_word_vector(word)*tf_value}
+            except Exception as e:
+                logging.error(e)
         else:
             dict = {"word": word, "vector": model.get_word_vector(word) * constant}
         list.append(dict["vector"])
@@ -200,24 +203,73 @@ def calculate_letters_similarity(model,df_tf_idf,df_read,constant,new_text,lette
     return df_cosine
 
 def create_test_df(df_cosine,df_read,graph,query="Letter"):
+    """
+    creates test file
+    :param df_cosine: dataframe with cosine similarities between letters
+    :param df_read: dataframe of paragraphs
+    :param graph: neo4j object
+    :param query: query of type of node of database
+    :return: file with tests
+    """
     db_letter = word2vec.graph_to_pandas(graph,query=query)
     df_cosine = df_cosine.iloc[1:, :]
-    df_cosine.loc[df_cosine['new_letter'] >0]
+    df_cosine = df_cosine.loc[df_cosine['new_letter'] >0]
     similarity_values = df_cosine.iloc[:,0].values
     counter = 0
     dict_list = []
+    dict_prod_list = []
     for elem in df_cosine.index:
         id_composed = " ".join(elem)
         id_letter = id_composed.split("---")[0]
         id_paragraph = id_composed.split("---")[1]
         text_letter = db_letter[db_letter.letter_id==id_letter]
-        text_letter = text_letter.transcription.values[0]
-        parag_text = df_read[df_read.let_par == df_cosine.index[counter][0]]
-        parag_text = parag_text.text.values[0]
-        dict = {"letter_name":id_letter,"similarity_value":similarity_values[counter],"text_letter":text_letter,"text_paragraph":parag_text,"paragraph_number":id_paragraph}
-        counter = counter +1
-        dict_list.append(dict)
+        if not text_letter.empty:
+            text_letter = text_letter.transcription.values[0]
+            parag_text = df_read[df_read.let_par == df_cosine.index[counter][0]]
+            parag_text = parag_text.text.values[0]
+            dict = {"letter_name":id_letter,"similarity_value":similarity_values[counter],"text_letter":text_letter,"text_paragraph":parag_text,"paragraph_number":id_paragraph}
+            dict_list.append(dict)
+        else:
+            logging.info("there is not letter with {} in db_letter".format(id_letter))
+        counter = counter + 1
     df_final = pd.DataFrame(dict_list)
     return df_final
+
+def response_return(df_cosine,graph,conf,query="Letter"):
+    """
+    creates response to give back to epistolarita
+    :param df_cosine: dataframe of cosine similarities
+    :param graph: graph object
+    :param query: query to get all letters
+    :return: json list
+    """
+    db_letter = word2vec.graph_to_pandas(graph,query=query)
+    df_cosine = df_cosine.iloc[1:, :]
+    df_cosine = df_cosine.loc[df_cosine['new_letter'] >0]
+    similarity_values = df_cosine.iloc[:,0].values
+    counter = 0
+    dict_prod_list = []
+    for elem in df_cosine.index:
+        id_composed = " ".join(elem)
+        id_letter = id_composed.split("---")[0]
+        id_paragraph = id_composed.split("---")[1]
+        row_letter = db_letter[db_letter.letter_id==id_letter]
+        if not row_letter.empty:
+            source = row_letter.source.values[0]
+            letter_id = row_letter.letter_id.values[0]
+            mittente = letter_id.split("-")[0]
+            destinatario = letter_id.split("-")[1]
+            score = np.round(similarity_values[counter],4)
+            dict = {"letter_id":letter_id,"score":str(score), "mittente":mittente,"destinatario":destinatario,"source":source,"paragraph_number":str(id_paragraph)}
+            dict_prod_list.append(dict)
+        else:
+            logging.info("there is not letter with {} in db_letter".format(id_letter))
+        counter = counter +1
+
+    out_file = open(os.getcwd()+conf.get("OUTPUT","production_json") +"-"+ datetime.now().strftime("%d-%m-%y-%H-%M-%S") + ".txt",'w+')
+    json.dump(dict_prod_list, out_file, indent=4)
+    out_file.close()
+
+
 
 

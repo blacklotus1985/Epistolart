@@ -15,6 +15,7 @@ from sklearn.decomposition import PCA
 from gensim.models import TfidfModel
 from gensim.corpora import Dictionary
 import pickle
+import logging
 
 
 def avg_w2vec(tf_idf_matrix,model):
@@ -130,7 +131,7 @@ def get_neighbors(text, ft,k,tuple): # item returned is a string not a list
 
 if __name__ == '__main__':
     begin = datetime.now()
-    print ("algorithm started at {}".format(begin))
+    logging.info ("algorithm in word2vec model started at {}".format(begin))
     conf = connection.get_conf()
     main_path = os.getcwd()
     path = os.path.dirname(os.getcwd())
@@ -139,74 +140,49 @@ if __name__ == '__main__':
     #graph = connection.connect(conf)
     #df_read = graph_to_pandas(graph,query="Paragraph")
     df_read = pickle.load(open(os.getcwd()+"/data/df_read.fourth", "rb"))
-    print(df_read.shape)
+    logging.info(df_read.shape)
     testo = conf.get("ITEMS","testo")
     df_read = df_read[df_read['translation'].notna()]
     df_read = df_read[df_read['translation'].map(len) > 400]
     #df_read = df_read.sample(1100)
     end = datetime.now()
-    rk = False
-    if rk:
-        end = datetime.now()
-        print("start rake at {}".format(end))
-        #kw = rake.extract_keywords(df_read.loc[3], lang=None)
-        end = datetime.now()
-        print("end rake at {}".format(end))
-    print("start get stopwords at {}".format(end))
+    logging.info("start get stopwords at {}".format(end))
     stopwords = get_stop_words('it')
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-aggettivi.txt', stopwords=stopwords)
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-varie.txt', stopwords=stopwords)
     stopwords = cleaner.add_stopwords(main_path + '/data/stp-verbi.txt', stopwords=stopwords)
     cleaned_corpus = cleaner.clean_text(df_read, conf, stopwords=stopwords, tagger=tagger, column='translation')
     end = datetime.now()
-    print("end get stopwords at {}".format(end))
+    logging.info("end get stopwords at {}".format(end))
     #text_testing = cleaned_corpus[3]
     words = "Io ho ordinato a certi amici mia, che mi fare alcuni sonetti per farro l'uffizio, mi chiedesti: che seno n'è ammalati due dare' meglio, del che non so come vino servire; pure vedrò fare sforzo, che avere qualcosa. Io non son tornato da Lucca primo che iersera e ho lasciare morto messer Biagio Mei, autore dell'òpera che io ho fatto in Lucca e son disperato per la pèrdita di più cose, che vino saranno un dì conte nel miglio visitarvi. Se io non arò i sonetti, vino manderò due mie lettere quest'altro sàbato: intanto si rinfrescherà e potrete meglio usarle. Io stare, come io pozzo, non come io dovere; e questo nàscere dal miglio esser troppo alle altrui voglie. Ma seno ‘l diàvolo mi spingere un tratto in costà, che potere esser di corto, ‘agroncando' le cose turchesche nel reame, sarò forzato non ne cavar piede. Intanto io resto vostro, con tutto che messer Ottaviano voglia la baia nel miglio ritorno a Roma, come seno io avessi da lei ricevere un papato. È finita; basta andare in là. Di voi so che n'è ‘massa buono'; e io gramo stare qui a spettar, che piova. Intanto io resto a comandi vostri."
 
     list_words = words.split(" ")
-    #text_testing = get_neighbors(list_words, ft=ft, k=10,tuple=True)
-    print ("before cleaning 2")
-    #print(text_testing)
-
-    #cleaned_corpus[3] = text_testing
-    #cleaned_corpus[3] = cleaner.removeNonAlpha(cleaned_corpus[3])
-    #cleaned_corpus[3] = cleaner.removeStopWords(cleaned_corpus[3],conf,stopwords=stopwords,remove_short_words=False)
-    #cleaned_corpus[3] = cleaner.lemmatize(cleaned_corpus[3],tagger=ft)
-
-    #text_testing = get_neighbors(text_testing,ft=ft,k=5)
     dict_text = create_vocabulary(words)
     letter_name = "Giorgio Vasari-Francesco Leoni-09/08/1544-568"
-    #print(letter_name)
-    #print(cleaned_corpus[3])
     df_read['let_par'] = [x + '---' + y for x, y in zip(df_read.letter_id.values, df_read.name.values)]
     combined_index = df_read['let_par'].values
 
     # Dump the variable tz into file save.p
     #pickle.dump(df_read, open(os.getcwd()+"/data/df_read.second", "wb"))
-    print('finished dump ###@@@@###')
     # tempo di computazione tipo nullo
     df_tf_idf, raw_matrix = calculate_tf_idf(corpus=cleaned_corpus, vocabulary = dict_text, index=combined_index) # remember to fix index=row_id when you find id letter in paragraphs
     start = datetime.now()
-    print("start calculate dataframe w2vec at {}".format(start))
+    logging.info("start calculate dataframe w2vec at {}".format(start))
     converted_df = converter.calculate_dataframe(df_tf_idf,model=ft)
     total_big_df = converter.total_w2vec(converted_df, ft, df_tf_idf)
     start = datetime.now()
-    print("end calculate dataframe w2vec at {}".format(start))
+    logging.info("end calculate dataframe w2vec at {}".format(start))
     start = datetime.now()
-    #print ("start saving total df at {}".format(start))
-    #total_big_df.to_csv(os.getcwd() + conf.get("OUTPUT", "total_big_df") + datetime.now().strftime("%d-%m-%y-%H-%M-%S") + ".csv")
-    start = datetime.now()
-    #print("finished saving total df at {}".format(start))
-    #final_result = avg_w2vec(df_tf_idf,model=ft)
     red = False
     if red:
         pc = PCA(n_components="mle")
         matrix = pc.fit_transform(total_big_df)
     start = datetime.now()
-    print("before cosine sim {}".format(start))
+    logging.info("before cosine sim {}".format(start))
     cosine_sim = np.round(cosine_similarity(total_big_df, total_big_df),15)
     start = datetime.now()
-    print("after cosine sim {}".format(start))
+    logging.info("after cosine sim {}".format(start))
     df_cosine = pd.DataFrame(cosine_sim,index=combined_index,columns=[combined_index])
     try:# add index=row_id,columns=[row_id] when fixed id letter problem
         df_cosine = df_cosine.sort_values(letter_name,ascending=False)
